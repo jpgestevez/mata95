@@ -8,23 +8,24 @@ import os
 # ==========================================
 # CONFIGURAÇÃO DE SERVIDOR (HEADLESS)
 # ==========================================
+# Tenta ligar o monitor virtual para a nuvem
 try:
-    pv.start_xvfb() # Inicia o monitor virtual
+    pv.start_xvfb()
 except:
     pass
 
-# Força o PyVista a não esperar interação humana
+# Configurações para garantir renderização sem janela
 pv.OFF_SCREEN = True 
-# Define tema para garantir contraste (fundo branco, letras pretas)
 pv.global_theme.background = 'white'
 pv.global_theme.font.color = 'black'
 
 st.set_page_config(page_title="Design de Copos 3D", layout="wide")
 
 # ==========================================
-# FUNÇÕES DO COPO
+# FUNÇÕES DE CÁLCULO E MALHA
 # ==========================================
 def make_f_func(expr: str):
+    """Cria função segura a partir do texto do usuário."""
     def f(z):
         z_arr = np.asarray(z)
         local_dict = {'z': z_arr, 'np': np, 'sin': np.sin, 'cos': np.cos, 'exp': np.exp, 'sqrt': np.sqrt, 'pi': np.pi}
@@ -35,6 +36,7 @@ def make_f_func(expr: str):
     return f
 
 def calcular_volume(r0, H, f_func, n_z=1000):
+    """Calcula volume por integração numérica."""
     Z = np.linspace(0.0, H, n_z)
     try:
         Rz = r0 + f_func(Z)
@@ -45,6 +47,7 @@ def calcular_volume(r0, H, f_func, n_z=1000):
         return 0.0
 
 def gerar_mesh(r0, H, f_func):
+    """Gera a geometria 3D."""
     n_z, n_theta = 150, 100
     Z = np.linspace(0.0, H, n_z)
     theta = np.linspace(0.0, 2*np.pi, n_theta)
@@ -59,14 +62,22 @@ def gerar_mesh(r0, H, f_func):
     X = Rg * np.cos(Tg)
     Y = Rg * np.sin(Tg)
     pts = np.column_stack((X.ravel(), Y.ravel(), Zg.ravel()))
+    
+    # Cria a parede do copo
     grid = pv.StructuredGrid()
     grid.dimensions = [n_theta, n_z, 1]
     grid.points = pts
+    
+    # Cria o fundo do copo
     bottom = pv.Circle(radius=r0, resolution=100)
-    return grid.combine(bottom)
+    
+    # --- CORREÇÃO AQUI ---
+    # Em vez de grid.combine(bottom), usamos a soma:
+    combined = grid + bottom 
+    return combined
 
 # ==========================================
-# INTERFACE
+# INTERFACE GRÁFICA
 # ==========================================
 st.title("🥤 Criador de Copos Personalizados")
 
@@ -78,11 +89,9 @@ with col1:
     height = st.number_input("Altura (cm)", 1.0, 50.0, 5.0, step=0.5)
     func_str = st.text_input("Curvatura da Parede f(z)", value="sin(z) + 0.5")
     
-    # Adicionei um ID único ao botão para evitar recarregamentos falsos
-    btn_calc = st.button("🔄 Gerar Copo", key="btn_gerar")
+    btn_calc = st.button("🔄 Gerar Copo", key="btn_gerar_v2")
 
 with col2:
-    # Sempre tenta rodar se houver input, para não ficar tela branca no início
     if btn_calc or func_str:
         f_func = make_f_func(func_str)
         
@@ -94,35 +103,28 @@ with col2:
         mesh = gerar_mesh(r0, height, f_func)
         
         if mesh:
-            st.write("Renderizando modelo...") # Debug visual
+            st.caption("Processando imagem 3D...") 
             
-            # --- BLOCO DE RENDERIZAÇÃO SEGURO ---
             try:
-                # Cria o plotter
+                # Setup do Plotter
                 plotter = pv.Plotter(off_screen=True, window_size=[600, 400])
                 plotter.add_mesh(mesh, color="lightblue", opacity=0.9, show_edges=False, specular=0.5)
                 plotter.view_isometric()
                 plotter.camera.zoom(1.2)
                 
-                # TRUQUE: Salva em arquivo físico em vez de memória
+                # Salva e exibe imagem
                 screenshot_path = "copo_temp.png"
                 plotter.screenshot(screenshot_path)
-                
-                # Mostra a imagem lendo do arquivo
                 st.image(screenshot_path, caption="Visualização 3D", use_column_width=True)
                 
-                # Remove o arquivo temporário para não acumular lixo
-                # (Opcional, mas boa prática)
-                # os.remove(screenshot_path) 
-                
-                # Botão Download
+                # Botão Download STL
                 with tempfile.NamedTemporaryFile(suffix=".stl", delete=False) as tmp:
                     mesh.save(tmp.name)
                     with open(tmp.name, "rb") as f:
                         st.download_button("📥 Baixar STL", f, "meu_copo.stl")
                         
             except Exception as e:
-                st.error(f"Erro ao renderizar imagem: {e}")
-                st.warning("Dica: Verifique se o arquivo 'packages.txt' contém 'xvfb' e 'libgl1-mesa-glx'.")
+                st.error(f"Erro ao renderizar: {e}")
+                st.warning("Verifique o arquivo packages.txt.")
         else:
-            st.error("Erro geométrico: A função gerou um raio negativo ou inválido.")
+            st.error("Erro geométrico. Verifique sua função.")
