@@ -17,7 +17,7 @@ pv.OFF_SCREEN = True
 pv.global_theme.background = 'white'
 pv.global_theme.font.color = 'black'
 
-st.set_page_config(page_title="Design de Copos 3D", layout="wide")
+st.set_page_config(page_title="Copos 3D", layout="wide")
 
 # ==========================================
 # 2. FUNÇÕES MATEMÁTICAS
@@ -74,8 +74,8 @@ def gerar_mesh(r0, H, f_func):
 # ==========================================
 # 3. INTERFACE GRÁFICA
 # ==========================================
-st.title("🥤 Criador de Copos Personalizados")
-st.markdown("Defina a geometria do copo, visualize em 3D e baixe o modelo para impressão.")
+st.title("🥤 Criador de Copos Personalizados por função")
+st.markdown("Defina as dimensões do copo, visualize-o em 3D e baixe o modelo para impressão.")
 
 col1, col2 = st.columns([1, 2])
 
@@ -84,7 +84,7 @@ with col1:
     st.markdown("### ⚙️ Parâmetros")
     r0 = st.number_input("Raio da Base (cm)", 0.5, 20.0, 3.0, step=0.1)
     height = st.number_input("Altura (cm)", 1.0, 50.0, 5.0, step=0.5)
-    func_str = st.text_input("Curvatura f(z)", value="sin(z) + 0.5")
+    func_str = st.text_input("f(z)", value="sin(z) + 0.5")
     st.caption("Tente: `z * 0.5` ou `log(z+1)`")
     
     btn_calc = st.button("🔄 Gerar Modelo", key="btn_main")
@@ -123,8 +123,9 @@ with col2:
                             mime="model/stl"
                         )
             except Exception as e:
-                st.error(f"Erro técnico: {e}")
+                st.error(f"Erro: {e}")
         else:
 
-            st.error("Erro na geometria: raio negativo detectado.")
+            st.error("Erro: raio negativo detectado.")
+
 
