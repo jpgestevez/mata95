@@ -1,0 +1,5 @@
+streamlit
+numpy
+numexpr
+pyvista
+vtk
