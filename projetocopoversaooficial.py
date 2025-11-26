@@ -6,10 +6,10 @@ import tempfile
 import os
 
 # ==========================================
-# 1. CONFIGURAÇÃO DO SERVIDOR (HEADLESS)
+# 1. CONFIGURAÇÃO DO SERVIDOR
 # ==========================================
 try:
-    pv.start_xvfb() # Inicia monitor virtual (Linux/Cloud)
+    pv.start_xvfb()
 except:
     pass
 
@@ -57,25 +57,18 @@ def gerar_mesh(r0, H, f_func):
     except:
         return None
 
-    # Coordenadas da parede
     X = Rg * np.cos(Tg)
     Y = Rg * np.sin(Tg)
     pts = np.column_stack((X.ravel(), Y.ravel(), Zg.ravel()))
     
-    # Cria a malha da parede
     wall = pv.StructuredGrid()
     wall.dimensions = [n_theta, n_z, 1]
     wall.points = pts
     
-    # Cria a malha do fundo
     bottom = pv.Circle(radius=r0, resolution=100)
     
-    # Junta as duas partes
     combined = wall + bottom
     
-    # --- A CORREÇÃO MÁGICA ---
-    # Converte o objeto complexo em uma superfície simples de triângulos.
-    # Isso permite salvar como .STL sem dar erro de extensão.
     return combined.extract_surface().triangulate()
 
 # ==========================================
@@ -86,6 +79,7 @@ st.markdown("Defina a geometria do copo, visualize em 3D e baixe o modelo para i
 
 col1, col2 = st.columns([1, 2])
 
+#Exibe botões
 with col1:
     st.markdown("### ⚙️ Parâmetros")
     r0 = st.number_input("Raio da Base (cm)", 0.5, 20.0, 3.0, step=0.1)
@@ -93,36 +87,32 @@ with col1:
     func_str = st.text_input("Curvatura f(z)", value="sin(z) + 0.5")
     st.caption("Tente: `z * 0.5` ou `log(z+1)`")
     
-    # Botão com ID único
     btn_calc = st.button("🔄 Gerar Modelo", key="btn_main")
 
+#Exibe gráfico, volume essas paradas
 with col2:
     if btn_calc or func_str:
         f_func = make_f_func(func_str)
         
-        # Exibe Volume
+ 
         vol = calcular_volume(r0, height, f_func)
         st.info(f"📊 Volume Estimado: **{(vol*0.001):.2f} litros**")
         
-        # Gera e Exibe 3D
         mesh = gerar_mesh(r0, height, f_func)
         
         if mesh:
             st.caption("Renderizando imagem...")
             try:
-                # Plota off-screen
+ 
                 plotter = pv.Plotter(off_screen=True, window_size=[600, 400])
                 plotter.add_mesh(mesh, color="lightblue", opacity=0.9, show_edges=False, specular=0.5)
                 plotter.view_isometric()
                 plotter.camera.zoom(1.2)
                 
-                # Salva imagem temporária
                 img_path = "temp_copo.png"
                 plotter.screenshot(img_path)
                 st.image(img_path, caption="Visualização 3D", use_column_width=True)
                 
-                # Botão Download STL
-                # Agora deve funcionar porque usamos .extract_surface().triangulate()
                 with tempfile.NamedTemporaryFile(suffix=".stl", delete=False) as tmp:
                     mesh.save(tmp.name)
                     with open(tmp.name, "rb") as f:
@@ -137,3 +127,4 @@ with col2:
         else:
 
             st.error("Erro na geometria: raio negativo detectado.")
+
