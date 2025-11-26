@@ -90,7 +90,6 @@ with col1:
     st.markdown("### ⚙️ Parâmetros")
     r0 = st.number_input("Raio da Base (cm)", 0.5, 20.0, 3.0, step=0.1)
     height = st.number_input("Altura (cm)", 1.0, 50.0, 5.0, step=0.5)
-    gross= st.number_input("Grossura (mm)", 1.0, 20.0, 5.0, step=0.5)
     func_str = st.text_input("Curvatura f(z)", value="sin(z) + 0.5")
     st.caption("Tente: `z * 0.5` ou `log(z+1)`")
     
@@ -136,4 +135,5 @@ with col2:
             except Exception as e:
                 st.error(f"Erro técnico: {e}")
         else:
+
             st.error("Erro na geometria: raio negativo detectado.")
