@@ -45,25 +45,55 @@ def calcular_volume(r0, H, f_func, n_z=1000):
         return 0.0
 
 def gerar_mesh(r0, H, f_func):
-    """Gera a visualização com fundo conectado corretamente e força formato Superfície."""
+    """Gera o copo soldando o fundo na parede para criar uma malha única."""
     n_z = 150
-    n_theta = 100  # Resolução angular
+    n_theta = 120  # Aumentei um pouco a resolução para ficar mais liso
     
     Z = np.linspace(0.0, H, n_z)
     theta = np.linspace(0.0, 2*np.pi, n_theta)
     Tg, Zg = np.meshgrid(theta, Z)
     
     try:
-        # Calcula o raio da parede
+        # 1. Calcula os raios
         Rg = r0 + f_func(Zg)
         Rg = np.maximum(Rg, 0)
         
-        # Calcula o raio exato na base para o fundo
+        # Raio exato da base para o disco do fundo
         raio_base_real = r0 + f_func(np.array([0.0]))[0]
         raio_base_real = max(raio_base_real, 0)
-        
     except:
         return None
+
+    # 2. Cria a Parede (Wall)
+    X = Rg * np.cos(Tg)
+    Y = Rg * np.sin(Tg)
+    pts = np.column_stack((X.ravel(), Y.ravel(), Zg.ravel()))
+    
+    wall_grid = pv.StructuredGrid()
+    wall_grid.dimensions = [n_theta, n_z, 1]
+    wall_grid.points = pts
+    wall_mesh = wall_grid.extract_surface().triangulate()
+
+    # 3. Cria o Fundo (Bottom)
+    # Importante: A resolução TEM que ser igual à da parede (n_theta)
+    bottom = pv.Circle(radius=raio_base_real, resolution=n_theta)
+    bottom = bottom.triangulate()
+    
+    # 4. Ajuste de Normais (Aponte para fora)
+    # O fundo original aponta para Z+. Queremos que aponte para baixo (fora do copo)
+    bottom = bottom.flip_normals()
+    
+    # 5. A SOLUÇÃO DO PROBLEMA (A Solda)
+    combined = wall_mesh + bottom
+    
+    # O comando clean com tolerância funde vértices que estão muito próximos.
+    # Isso "cola" o fundo na parede transformando em um objeto só.
+    combined = combined.clean(tolerance=0.01)
+    
+    # Recalcula as normais para garantir que a luz e a impressora entendam o sólido
+    combined = combined.compute_normals(consistent_normals=True)
+    
+    return combined.extract_surface().triangulate()
 
     # Coordenadas da Parede
     X = Rg * np.cos(Tg)
@@ -177,6 +207,7 @@ with col2:
         else:
 
             st.error("Erro: raio negativo detectado.")
+
 
 
 
