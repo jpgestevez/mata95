@@ -34,7 +34,7 @@ def make_f_func(expr: str):
     return f
 
 def calcular_volume(r0, H, f_func, n_z=1000):
-    """Calcula o volume."""
+    """Calcula o volume estimado."""
     Z = np.linspace(0.0, H, n_z)
     try:
         Rz = r0 + f_func(Z)
@@ -45,9 +45,9 @@ def calcular_volume(r0, H, f_func, n_z=1000):
         return 0.0
 
 def gerar_mesh(r0, H, f_func):
-    """Gera o copo soldando o fundo na parede para criar uma malha única."""
+    """Gera o copo soldando o fundo na parede de forma robusta."""
     n_z = 150
-    n_theta = 120  # Aumentei um pouco a resolução para ficar mais liso
+    n_theta = 120
     
     Z = np.linspace(0.0, H, n_z)
     theta = np.linspace(0.0, 2*np.pi, n_theta)
@@ -72,84 +72,30 @@ def gerar_mesh(r0, H, f_func):
     wall_grid = pv.StructuredGrid()
     wall_grid.dimensions = [n_theta, n_z, 1]
     wall_grid.points = pts
+    
+    # Converte parede para superfície e triangula
     wall_mesh = wall_grid.extract_surface().triangulate()
 
     # 3. Cria o Fundo (Bottom)
-    # Importante: A resolução TEM que ser igual à da parede (n_theta)
     bottom = pv.Circle(radius=raio_base_real, resolution=n_theta)
-    bottom = bottom.triangulate()
-    
-    # 4. Ajuste de Normais (Aponte para fora)
-    # O fundo original aponta para Z+. Queremos que aponte para baixo (fora do copo)
+    # Triangula ANTES de inverter normais para evitar erro
+    bottom = bottom.triangulate() 
     bottom = bottom.flip_normals()
     
-    # 5. A SOLUÇÃO DO PROBLEMA (A Solda)
+    # 4. A SOLUÇÃO DO PROBLEMA (A Solda Segura)
     combined = wall_mesh + bottom
     
-    # O comando clean com tolerância funde vértices que estão muito próximos.
-    # Isso "cola" o fundo na parede transformando em um objeto só.
+    # --- CORREÇÃO DO ERRO ---
+    # 1. Força o resultado a ser uma Superfície (PolyData)
+    combined = combined.extract_surface()
+    
+    # 2. Faz a limpeza (solda vértices próximos com tolerância)
     combined = combined.clean(tolerance=0.01)
     
-    # Recalcula as normais para garantir que a luz e a impressora entendam o sólido
-    combined = combined.compute_normals(consistent_normals=True)
+    # 3. Garante triângulos finais (Removemos compute_normals para evitar conflito)
+    combined = combined.triangulate()
     
-    return combined.extract_surface().triangulate()
-
-    # Coordenadas da Parede
-    X = Rg * np.cos(Tg)
-    Y = Rg * np.sin(Tg)
-    pts = np.column_stack((X.ravel(), Y.ravel(), Zg.ravel()))
-    
-    # Cria a malha da parede
-    wall_grid = pv.StructuredGrid()
-    wall_grid.dimensions = [n_theta, n_z, 1]
-    wall_grid.points = pts
-    
-    # Converte a parede para superfície
-    wall_mesh = wall_grid.extract_surface().triangulate()
-    
-    # Cria o fundo
-    bottom = pv.Circle(radius=raio_base_real, resolution=n_theta)
-    
-    # Força a triangulação antes de inverter normais (Corrige erro NotAllTrianglesError)
-    bottom = bottom.triangulate()
-    bottom = bottom.flip_normals()
-    
-    # Junta as duas partes
-    combined = wall_mesh + bottom
-    
-    # --- CORREÇÃO DO ERRO DE EXTENSÃO ---
-    # O comando extract_surface() garante que o objeto final seja PolyData (superfície),
-    # que é o único tipo que o formato .STL aceita.
-    return combined.extract_surface().clean().triangulate()
-
-    # Coordenadas da Parede
-    X = Rg * np.cos(Tg)
-    Y = Rg * np.sin(Tg)
-    pts = np.column_stack((X.ravel(), Y.ravel(), Zg.ravel()))
-    
-    # Cria a malha da parede
-    wall_grid = pv.StructuredGrid()
-    wall_grid.dimensions = [n_theta, n_z, 1]
-    wall_grid.points = pts
-    
-    # Converte a parede para superfície
-    wall_mesh = wall_grid.extract_surface().triangulate()
-    
-    # Cria o fundo
-    bottom = pv.Circle(radius=raio_base_real, resolution=n_theta)
-    
-    # --- CORREÇÃO AQUI ---
-    # Primeiro transformamos o círculo em triângulos, 
-    # só depois invertemos as normais.
-    bottom = bottom.triangulate()
-    bottom = bottom.flip_normals()
-    
-    # Junta as duas partes
-    combined = wall_mesh + bottom
-    
-    # Limpa e finaliza
-    return combined.clean().triangulate()
+    return combined
 
 # ==========================================
 # 3. INTERFACE GRÁFICA
@@ -159,56 +105,38 @@ st.markdown("Defina as dimensões do copo, visualize-o em 3D e baixe o modelo pa
 
 col1, col2 = st.columns([1, 2])
 
-#Exibe botões
+# Exibe botões
 with col1:
     st.markdown("### ⚙️ Parâmetros")
     r0 = st.number_input("Raio da Base (cm)", 0.5, 20.0, 3.0, step=0.1)
     height = st.number_input("Altura (cm)", 1.0, 50.0, 5.0, step=0.5)
     func_str = st.text_input("f(z)", value="sin(z) + 0.5")
-    st.caption("Tente: `z * 0.5` ou `log(z+1)`")
+    st.caption("Tente: `z * 0.2` (cone) ou `sin(z)*0.5` (ondulado).")
     
     btn_calc = st.button("🔄 Gerar Modelo", key="btn_main")
 
-#Exibe gráfico, volume essas paradas
+# Exibe gráfico e volume
 with col2:
     if btn_calc or func_str:
         f_func = make_f_func(func_str)
         
- 
         vol = calcular_volume(r0, height, f_func)
         st.info(f"📊 Volume Estimado: **{(vol*0.001):.2f} litros**")
         
+        # Gera a malha
         mesh = gerar_mesh(r0, height, f_func)
         
         if mesh:
             st.caption("Renderizando imagem...")
             try:
- 
                 plotter = pv.Plotter(off_screen=True, window_size=[600, 400])
-                plotter.add_mesh(mesh, color="lightblue", opacity=0.9, show_edges=False, specular=0.5)
+                
+                # Configuração visual
+                plotter.add_mesh(mesh, color="#add8e6", opacity=1.0, show_edges=False, specular=0.3, smooth_shading=True)
+                
                 plotter.view_isometric()
                 plotter.camera.zoom(1.2)
                 
                 img_path = "temp_copo.png"
                 plotter.screenshot(img_path)
-                st.image(img_path, caption="Visualização 3D", use_column_width=True)
-                
-                with tempfile.NamedTemporaryFile(suffix=".stl", delete=False) as tmp:
-                    mesh.save(tmp.name)
-                    with open(tmp.name, "rb") as f:
-                        st.download_button(
-                            label="📥 Baixar Arquivo .STL",
-                            data=f,
-                            file_name="meu_copo.stl",
-                            mime="model/stl"
-                        )
-            except Exception as e:
-                st.error(f"Erro: {e}")
-        else:
-
-            st.error("Erro: raio negativo detectado.")
-
-
-
-
-
+                st.image(img_path, caption="Visualização 3D (Com fundo fechado)", use_column_width=True)
