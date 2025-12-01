@@ -45,7 +45,7 @@ def calcular_volume(r0, H, f_func, n_z=1000):
         return 0.0
 
 def gerar_mesh(r0, H, f_func):
-    """Gera a visualização com fundo conectado corretamente."""
+    """Gera a visualização com fundo conectado corretamente e força formato Superfície."""
     n_z = 150
     n_theta = 100  # Resolução angular
     
@@ -64,6 +64,34 @@ def gerar_mesh(r0, H, f_func):
         
     except:
         return None
+
+    # Coordenadas da Parede
+    X = Rg * np.cos(Tg)
+    Y = Rg * np.sin(Tg)
+    pts = np.column_stack((X.ravel(), Y.ravel(), Zg.ravel()))
+    
+    # Cria a malha da parede
+    wall_grid = pv.StructuredGrid()
+    wall_grid.dimensions = [n_theta, n_z, 1]
+    wall_grid.points = pts
+    
+    # Converte a parede para superfície
+    wall_mesh = wall_grid.extract_surface().triangulate()
+    
+    # Cria o fundo
+    bottom = pv.Circle(radius=raio_base_real, resolution=n_theta)
+    
+    # Força a triangulação antes de inverter normais (Corrige erro NotAllTrianglesError)
+    bottom = bottom.triangulate()
+    bottom = bottom.flip_normals()
+    
+    # Junta as duas partes
+    combined = wall_mesh + bottom
+    
+    # --- CORREÇÃO DO ERRO DE EXTENSÃO ---
+    # O comando extract_surface() garante que o objeto final seja PolyData (superfície),
+    # que é o único tipo que o formato .STL aceita.
+    return combined.extract_surface().clean().triangulate()
 
     # Coordenadas da Parede
     X = Rg * np.cos(Tg)
@@ -149,6 +177,7 @@ with col2:
         else:
 
             st.error("Erro: raio negativo detectado.")
+
 
 
 
